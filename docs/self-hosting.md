@@ -1194,17 +1194,42 @@ others see it. A screen is sent as large as 1920 by 1080, at up to 15 frames a s
 without its sound, and only to those who have the huddle open: once it's minimized, its bar says
 who's sharing. A phone's browser has no screen to share, so phones watch.
 
+On a phone, where the huddle is over all of the page and has no arrows, a button beside the camera,
+Switch camera, is there while your camera is on and the browser has another. It shows the camera
+that faces the other way, as a phone's back camera does from its front one, or the next the browser
+lists where it doesn't say which way its cameras face, and this browser's next huddle starts with
+it. A phone opens one of its cameras at a time, so a huddle lets go of the camera that's on before
+it opens another, on a computer too, and opens it again when the browser won't open the other, which
+you're told. Your own picture shows as a mirror would, unless your camera faces away from you. A
+phone's browser stops a page once its screen locks, and the huddle with it, so a huddle keeps the
+screen of a phone or a tablet awake for as long as its page shows, where the browser can, which one
+may refuse while the phone saves its battery. Whatever the browser stopped while you were in another
+app, the others' voices, their pictures or the telling of who's speaking, starts again as you come
+back to the page, and a tab that lost the room meanwhile joins the huddle again by itself.
+
 A sound plays as someone joins the huddle, yourself included, and another as someone leaves it. While
 you're the only one in it, quiet music plays on a loop, as Slack's does, from five seconds after you
-find yourself alone until someone joins you. The two sounds were written for Ember and the music was
-generated for it by Google's AI, so nothing is owed for playing them, and
+find yourself alone until someone joins you. The two sounds, and an invitation's ring, were written
+for Ember and the music was generated for it by Google's AI, so nothing is owed for playing them, and
 `apps/web/src/lib/huddle-sounds/` says where each came from and how to change them.
 Ctrl+Alt+Shift+H (⌘⌥⇧H on a Mac) leaves the huddle you're in, or opens the preview for the room
 you're looking at, and Ctrl+Shift+Space (⌘⇧Space) mutes and unmutes. The arrow beside the headphones
 copies the huddle's link, which opens the room at the preview, or the huddle once you're in it. A
 huddle takes up to 50 people and ends when the last of them leaves. A tab is in one huddle at a time,
-and joining a room's huddle from another tab or device leaves it in the first. DMs have no huddles
-yet.
+and joining a room's huddle from another tab or device leaves it in the first.
+
+A direct message has a huddle too, with the headphones at its top and its mark on its row in the
+sidebar, when there's someone in it to huddle with, which a bot or an AI agent isn't, nor anyone who
+can no longer sign in. Starting one there invites the others in it. Wherever they have Ember open,
+an invitation shows in the window's corner, under the header, whatever page they're on: who invites
+them, over Decline and Join. It rings for half a minute, in one of a browser's tabs at a time, and
+without a sound for someone who's in a huddle already. Join opens the huddle's preview, so nobody is
+in a huddle before they've said how they join it, and answering an invitation, either way, takes it
+down in their other tabs and on their other devices. Whoever started the huddle isn't told of a
+Decline. It stops ringing by itself once the huddle is over, or once they're in it. An invitation
+reaches the people in the direct message who hear its @mentions or more, so nobody who has turned
+its notifications off, and only where Ember is open: a device with Ember closed doesn't ring yet.
+Nothing is kept of an invitation, so one that comes while someone's connection is down is lost.
 
 An administrator turns huddles on under Huddles in community settings, with the switch on its card.
 Huddles run through Cloudflare's [Realtime SFU](https://developers.cloudflare.com/realtime/sfu/),
