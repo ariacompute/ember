@@ -1164,12 +1164,24 @@ then, shows you its picture and offers a choice of camera.
 The huddle opens as you join it, over the page beside the sidebar, or over all of a phone's: a tile
 for each person, with their camera's picture, or their avatar while it's off, their name, and a mark
 while they're muted, as large as shows everyone in the window, and the microphone, the camera, the
-screen and Leave along its base. Minimizing it, or going to any page, leaves a bar along the window's
-base, which follows you from page to page with the microphone, the camera, the screen, the button
-that opens the huddle again, and Leave; a phone's bar has the microphone and Leave, and opens the
-huddle at its name. Cameras are 640 by 360 at up to 500 kbps, and up to 25 can be on in a huddle at
-once. Your browser is sent the others' only while you have the huddle open, and a camera's picture
-isn't kept in step with its person's voice, which travels apart from it.
+screen and Leave along its base. Where the huddle is beside the sidebar, as on a computer, an arrow
+beside the microphone opens a menu of the microphones to speak through and, where the browser can
+choose one, the speakers to play the huddle through, and an arrow beside the camera a menu of the
+cameras. The huddle changes to the one chosen without leaving, as muted as it was, and this
+browser's next huddle starts with it. Someone who joined to listen can take up a microphone there,
+and choosing a camera while yours is off turns it on. Minimizing it, or going to any page, leaves a
+bar along the window's base, which follows you from page to page with the microphone, the camera,
+the screen, the button that opens the huddle again, and Leave; a phone's bar has the microphone and
+Leave, and opens the huddle at its name. Whoever is speaking has a green ring round their tile, and
+round their face on the bar. Your browser tells who by how loud each voice it plays is, and your own
+by your microphone, so nothing more is sent for it, and nobody muted shows as speaking. Cameras are
+640 by 360 at up to 500 kbps, and up to 25 can be on in a huddle at once. Chrome, Edge and the other
+browsers built on Chromium send a camera in a second size as well, 320 by 180 at up to 150 kbps, and
+a browser whose tiles are no taller than that, as with many people in the huddle, or beside a
+shared screen, is sent that size in place of the larger. Safari and Firefox send a camera in the one
+size, which everyone is sent. Your browser is sent the others' cameras only while you have the
+huddle open, and a camera's picture isn't kept in step with its person's voice, which travels apart
+from it.
 
 Share screen, beside the camera, has your browser ask which screen, window or tab to share, and
 shares it until you stop it there or in your browser. Two people can share at once, as in Slack's
@@ -1221,6 +1233,23 @@ its person is told, and the room refuses any it's asked to show. With both off, 
 only. The room takes down whichever cameras and screens a tab left on, eight every half minute.
 Turning a switch on again gives its buttons back, and nobody's camera comes on, or screen is shared,
 by itself.
+
+Some networks, like an office's or a hotel's, block the way a browser reaches the SFU, and nobody on
+one can connect to a huddle. A third card, Relay for strict networks, gives huddles a relay for them:
+Cloudflare's [TURN service](https://developers.cloudflare.com/realtime/turn/), by a TURN key in your
+Cloudflare account. Turning the card on opens Set up the relay, which has two steps: create a TURN
+key under Realtime in the Cloudflare dashboard, which the dialog's button opens, then copy the key's
+TURN Token ID and API Token into the dialog, where the token shows as dots. Before it keeps the key,
+the Worker has Cloudflare make a relay's servers with it, which nobody is given, so a key Cloudflare
+doesn't know, or a token that isn't the key's, is refused on its field. Change key takes another's,
+and turning the card off forgets it, as turning huddles off does, while another SFU app's keys leave
+it as it is. The token is kept encrypted and stays in the Worker. As each tab joins a huddle, the
+Worker asks Cloudflare for the servers its connections go by, the relay's among them, with a name and
+a credential made for that tab, which last a day. A browser still reaches the SFU directly where it
+can, and through the relay only where its network blocks the way. Cloudflare has four seconds to
+answer, and a tab it doesn't answer for joins without the relay, which the Worker's log says. A tab
+whose connection fails once its day is over joins again, for new ones. Cloudflare doesn't charge for
+the TURN service when it's used with the Realtime SFU.
 
 ### A preview from GitHub Actions
 
@@ -1441,9 +1470,13 @@ pages had them in October 2026:
   it, so five people talking for an hour are sent under half a GB between them, and the free 1,000 GB
   carry about 2,000 such hours a month. A camera is up to 500 kbps to each person who has the huddle
   open, so the same five with their cameras on throughout are sent up to 4.5 GB more in the hour, and
-  the free 1,000 GB carry about 200 such hours a month. A shared screen is up to 1.5 Mbps to each
-  person who has the huddle open, so one shared with the other four throughout is up to 2.7 GB more
-  in the hour. Turning Cameras and Screen sharing off under Huddles keeps huddles to voices.
+  the free 1,000 GB carry about 200 such hours a month. A camera from a browser that sends it in two
+  sizes is up to 150 kbps to each person whose tiles show it small, so twenty people with their
+  cameras on throughout, each in a window that shows the others small, are sent up to 26 GB in the
+  hour, where the larger size would come to 86. A shared screen is up to 1.5 Mbps to each person who
+  has the huddle open, so one shared with the other four throughout is up to 2.7 GB more in the
+  hour. Turning Cameras and Screen sharing off under Huddles keeps huddles to voices. A relay for
+  strict networks adds nothing to it: Cloudflare's TURN service is free of charge used with the SFU.
 
 Cloudflare's pages have the details: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/),
 [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),

@@ -3,8 +3,9 @@ import type { Room, User, UserId } from "@ember/protocol";
 import type { HuddlePerson } from "@ember/protocol/huddles";
 import { Collapse, Headset, MicrophoneMute, NavArrowDown } from "@/components/icons/iconoir";
 import { useNameOf } from "@/hooks/use-directory";
-import { OPEN_HUDDLE, openHuddle, type JoinedHuddle } from "@/lib/huddle-store";
-import { SCREEN_SHAPE, stageLayout, TILE_GAP, tilesLayout } from "@/lib/huddle-tiles";
+import { useIsSpeaking } from "@/hooks/use-huddle";
+import { OPEN_HUDDLE, openHuddle, takeCamerasSmall, type JoinedHuddle } from "@/lib/huddle-store";
+import { SCREEN_SHAPE, showsCamerasSmall, stageLayout, TILE_GAP, tilesLayout } from "@/lib/huddle-tiles";
 import { cn } from "@/lib/utils";
 import { HuddlePicture } from "./huddle-picture";
 import { CameraTool, LeaveButton, MicrophoneTool, ScreenTool, useHuddleName, waitingToJoin } from "./huddle-tools";
@@ -59,10 +60,15 @@ interface TileProps {
   className: string;
 }
 
-/** Someone in the huddle: their camera's picture, or their avatar while it's off, over their name. */
+/**
+ * Someone in the huddle: their camera's picture, or their avatar while it's off, over their name, and
+ * ringed in green while they speak. The ring is in the tile's edge's place: drawn against each other,
+ * the two show a seam between them at the corners.
+ */
 function Tile({ person, name, you, picture, className }: TileProps) {
+  const speaking = useIsSpeaking(person);
   return (
-    <li className={cn(TILE, className)}>
+    <li className={cn(TILE, speaking && "border-transparent", className)}>
       {picture ? (
         <HuddlePicture stream={picture} label={you ? "Your camera" : `${name}'s camera`} mirrored={you} />
       ) : (
@@ -76,6 +82,8 @@ function Tile({ person, name, you, picture, className }: TileProps) {
           {you && " (you)"}
         </span>
       </span>
+      {/* Last, so over the tile's picture. */}
+      {speaking && <span role="img" aria-label="Speaking" className="pointer-events-none absolute inset-0 rounded-[15px] border-2 border-positive" />}
     </li>
   );
 }
@@ -189,7 +197,8 @@ interface Props {
 /**
  * The huddle this tab is in, opened, inside Ember, over the page beside the sidebar, and over all of a
  * phone's: its name and how many are in it, a tile for each of them, as large as shows them all, and
- * along its base the microphone, the camera, the screen and Leave, where Slack has them. While someone
+ * along its base the microphone, the camera, the screen and Leave, where Slack has them, the first two
+ * with an arrow that chooses which microphone, speaker or camera the huddle uses. While someone
  * else shares a screen it shows that large, and the tiles in what it leaves them, beside it or under
  * it, as on a phone held upright, whichever shows the screen larger. The screen that shows is the
  * one this tab's person chose among the tiles, while it's shared and the tab has it to show, or else
@@ -212,6 +221,11 @@ export function HuddleView({ huddle, room, meId }: Props) {
   const tileCount = count + (huddle.screen ? 1 : 0) + Math.max(0, sharing.length - 1);
   const stage = staged && stagedScreen ? { user: staged, stream: stagedScreen, ...stageLayout(tileCount, shape, space.width, space.height) } : null;
   const { columns, width, square } = stage?.tiles ?? tilesLayout(tileCount, space.width, space.height);
+  // The huddle is sent each camera in the size its tiles show, once it has tiles and knows what size they are, as is the next this tab joins from here.
+  const [sized, small] = [tileCount > 0 && space.width > 0, showsCamerasSmall({ width, square })];
+  useEffect(() => {
+    if (sized) takeCamerasSmall(small);
+  }, [sized, small, huddle.roomId]);
   // It covers the page whatever had the focus there, so it takes it as it opens.
   const section = useRef<HTMLElement>(null);
   useEffect(() => section.current?.focus(), []);
@@ -271,8 +285,8 @@ export function HuddleView({ huddle, room, meId }: Props) {
 
       <footer className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t bg-background px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] max-md:flex max-md:justify-between max-md:gap-1.5 max-md:px-2.5">
         <div className="col-start-2 flex gap-1.5">
-          <MicrophoneTool huddle={huddle} />
-          <CameraTool huddle={huddle} />
+          <MicrophoneTool huddle={huddle} devices />
+          <CameraTool huddle={huddle} devices />
           <ScreenTool huddle={huddle} />
         </div>
         <div className="flex justify-end">

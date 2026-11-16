@@ -1,12 +1,12 @@
 import type { DirectoryUser, Room, User } from "@ember/protocol";
 import type { HuddlePerson } from "@ember/protocol/huddles";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { AccountContext, useAccount } from "@/hooks/use-account";
 import { PeopleContext } from "@/hooks/use-directory";
-import { showHuddle, type JoinedHuddle } from "@/lib/huddle-store";
+import { showHuddle, showSpeaking, type JoinedHuddle } from "@/lib/huddle-store";
 import { HuddleView } from "./huddle-view";
 
 const ada: User = { id: "ada", name: "Ada Lovelace" };
@@ -21,6 +21,8 @@ const huddle = (changes: Partial<JoinedHuddle> = {}): JoinedHuddle => ({
   people: [inHuddle(sam), inHuddle(ada)],
   muted: false,
   microphone: true,
+  microphoneId: "",
+  speakerId: "",
   camera: null,
   watched: new Map(),
   screen: null,
@@ -35,7 +37,7 @@ const crowd = (count: number) => Array.from({ length: count }, (_, index) => inH
 
 /** The huddle this tab is in, opened, with what the huddle's controls were asked. */
 function renderView(joined: JoinedHuddle = huddle(), room: Room | null = general) {
-  const controls = { leave: vi.fn(), setMuted: vi.fn(), setCamera: vi.fn(), setScreen: vi.fn(), setOpen: vi.fn() };
+  const controls = { leave: vi.fn(), setMuted: vi.fn(), setCamera: vi.fn(), setScreen: vi.fn(), setOpen: vi.fn(), setDevice: vi.fn(), setSmall: vi.fn() };
   act(() => showHuddle(joined, controls));
   const user = userEvent.setup();
   const view = render(<HuddleView huddle={joined} room={room} meId="ada" />);
@@ -92,6 +94,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => showHuddle(null));
+  act(() => showSpeaking(new Set()));
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, "mediaDevices");
@@ -169,6 +172,37 @@ describe("The tiles of a huddle", () => {
     expect(within(third!).queryByRole("img", { name: "Muted" })).not.toBeInTheDocument();
   });
 
+  it("rings whoever is speaking in green, over their picture, which it says for those who can't see it, but nobody who's muted", () => {
+    renderView(huddle({ people: [inHuddle(sam), inHuddle(ada), inHuddle(priya, { muted: true })], watched: new Map([["sam", camera()]]) }));
+    const ring = (tile: HTMLElement | undefined) => within(tile!).queryByRole("img", { name: "Speaking" });
+    for (const tile of tiles()) {
+      expect(tile).not.toHaveClass("border-transparent");
+      expect(ring(tile)).not.toBeInTheDocument();
+    }
+
+    act(() => showSpeaking(new Set(["sam", "priya"])));
+    const [first, second, third] = tiles();
+    // In the tile's edge's place, and drawn last, so over the camera's picture, where a click goes through it.
+    expect(first).toHaveClass("border-transparent");
+    expect(ring(first)).toHaveClass("pointer-events-none", "absolute", "inset-0", "border-2", "border-positive");
+    expect(first!.lastElementChild).toBe(ring(first));
+    expect(first!.querySelector("video")).toBeInTheDocument();
+    // Its name stays as it was.
+    expect(first).toHaveTextContent(/^Sam Rivera$/);
+    expect(second).not.toHaveClass("border-transparent");
+    expect(ring(second)).not.toBeInTheDocument();
+    // Whatever was heard of Priya as she muted.
+    expect(third).not.toHaveClass("border-transparent");
+    expect(ring(third)).not.toBeInTheDocument();
+
+    act(() => showSpeaking(new Set(["ada"])));
+    expect(tiles().map((tile) => [tile.classList.contains("border-transparent"), ring(tile) !== null])).toEqual([
+      [false, false],
+      [true, true],
+      [false, false],
+    ]);
+  });
+
   it("shows someone's camera in place of their avatar, playing without sound", () => {
     const sams = camera();
     renderView(huddle({ people: [inHuddle(sam, { video: true }), inHuddle(ada), inHuddle(priya, { video: true })], watched: new Map([["sam", sams]]) }));
@@ -225,6 +259,45 @@ describe("The tiles of a huddle", () => {
     expect(list()).toHaveStyle({ gridTemplateColumns: "repeat(2, 142px)" });
     for (const tile of tiles()) expect(tile).toHaveClass("aspect-square");
   });
+
+  it("tells the huddle once its tiles are no taller than the smaller of a camera's sizes, and once they're taller again", () => {
+    const space = { width: 1200, height: 700 };
+    const resized = measuring(space);
+    const { setSmall, rerender } = renderView(huddle({ people: [...crowd(3), inHuddle(ada)] }));
+    // Four people in 1200 by 700: tiles as wide as they get, 315px tall.
+    expect(setSmall.mock.calls).toEqual([[false]]);
+
+    // Twenty: five to a row, 221px wide and 165px tall, which the smaller size fills.
+    rerender(<HuddleView huddle={huddle({ people: [...crowd(19), inHuddle(ada)] })} room={general} meId="ada" />);
+    expect(list()).toHaveStyle({ gridTemplateColumns: "repeat(5, 221px)" });
+    expect(setSmall.mock.calls).toEqual([[false], [true]]);
+
+    // In a window twice as tall they're four to a row, and 218px tall.
+    Object.assign(space, { width: 1200, height: 1400 });
+    resized();
+    expect(list()).toHaveStyle({ gridTemplateColumns: "repeat(4, 291px)" });
+    expect(setSmall.mock.calls).toEqual([[false], [true], [false]]);
+  });
+
+  it("says nothing of its tiles' size before it has measured them, and tells the next huddle the tab joins from it", () => {
+    const { setSmall, unmount } = renderView();
+    expect(setSmall).not.toHaveBeenCalled();
+    unmount();
+
+    measuring({ width: 1200, height: 700 });
+    const { rerender } = render(<HuddleView huddle={huddle()} room={general} meId="ada" />);
+    expect(setSmall.mock.calls).toEqual([[false]]);
+    rerender(<HuddleView huddle={huddle({ roomId: "random" })} room={general} meId="ada" />);
+    expect(setSmall.mock.calls).toEqual([[false], [false]]);
+  });
+
+  it("says nothing of its tiles' size either while the room has yet to say who's in the huddle, when it has no tiles", () => {
+    measuring({ width: 1200, height: 700 });
+    const { setSmall, rerender } = renderView(huddle({ connected: false, you: null, people: [] }));
+    expect(setSmall).not.toHaveBeenCalled();
+    rerender(<HuddleView huddle={huddle()} room={general} meId="ada" />);
+    expect(setSmall.mock.calls).toEqual([[false]]);
+  });
 });
 
 describe("A screen shared in a huddle", () => {
@@ -253,6 +326,14 @@ describe("A screen shared in a huddle", () => {
     expect(list()).not.toHaveClass("shrink-0");
     expect(list().parentElement).not.toHaveClass("flex-col", "overflow-auto");
     for (const tile of tiles()) expect(tile).toHaveClass("aspect-[4/3]");
+  });
+
+  it("tells the huddle that the tiles in the strip beside a screen are small, which are no taller than the smaller of a camera's sizes", () => {
+    measuring({ width: 1400, height: 800 });
+    const { setSmall } = renderView(huddle({ people: [inHuddle(sam, { screen: true }), inHuddle(ada)], screens: new Map([["sam", shared()]]) }));
+    // Two tiles as wide as the strip's get, 220px, are 165px tall.
+    expect(list()).toHaveStyle({ gridTemplateColumns: "repeat(1, minmax(0, 220px))" });
+    expect(setSmall.mock.calls).toEqual([[true]]);
   });
 
   it("has the tiles under the screen where that shows it larger than beside them, as on a phone held upright, laid out in what it leaves them", () => {
@@ -397,6 +478,35 @@ describe("The buttons along the base of a huddle", () => {
     );
     await user.click(screen.getByRole("button", { name: "Turn off camera" }));
     expect(setCamera.mock.calls).toEqual([[false]]);
+  });
+
+  it("has an arrow beside the microphone and one beside the camera, on a computer, each of a piece with its button and lit as it is, which opens the menu of its devices", async () => {
+    Object.defineProperty(navigator, "mediaDevices", { value: Object.assign(new EventTarget(), { enumerateDevices: async () => [] }), configurable: true });
+    const { user } = renderView();
+    const [microphones, cameras] = [screen.getByRole("button", { name: "Microphone and speaker" }), screen.getByRole("button", { name: "Camera" })];
+    for (const arrow of [microphones, cameras]) expect(arrow).toHaveClass("max-md:hidden", "rounded-l-none");
+    for (const name of ["Mute microphone", "Turn on camera"]) expect(screen.getByRole("button", { name })).toHaveClass("md:rounded-r-none");
+    expect(microphones).toHaveClass("bg-foreground", "text-background");
+    expect(cameras).toHaveClass("bg-hover");
+
+    await user.click(cameras);
+    expect(await screen.findByRole("menu")).toHaveAccessibleName("Camera");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    await user.click(microphones);
+    expect(await screen.findByRole("menu")).toHaveAccessibleName("Microphone and speaker");
+  });
+
+  it("has no arrow beside the camera while an administrator has cameras off, who leaves none to choose", () => {
+    const { rerender } = renderView();
+    rerender(
+      <CamerasOff>
+        <HuddleView huddle={huddle({ camera: camera() })} room={general} meId="ada" />
+      </CamerasOff>,
+    );
+    expect(screen.getByRole("button", { name: "Turn off camera" })).not.toHaveClass("md:rounded-r-none");
+    expect(screen.queryByRole("button", { name: "Camera" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Microphone and speaker" })).toBeInTheDocument();
   });
 
   it("keeps its camera button under a workspace that says nothing of cameras, as one told of by an older Worker does", () => {
