@@ -1,0 +1,114 @@
+name: Release artifacts
+
+# Publishes Ember's self-hosted container image whenever a GitHub Release is published (the tag is
+# the version, e.g. v1.2.3), pushing it to DockerHub, Quay.io and GitHub Container Registry.
+#
+# Registry secrets (a registry is skipped, not failed, when its credentials are absent):
+#   - DOCKERHUB_USERNAME / DOCKERHUB_TOKEN: DockerHub account and write token
+#   - QUAY_USERNAME / QUAY_TOKEN:           Quay.io account and write token
+#   - ARIACOMPUTE_TOKEN:                    GitHub PAT with packages:write, for GHCR
+#
+# Image tags come from the release tag with the leading v removed (v1.2.3 -> 1.2.3). Tags may carry
+# a short commit suffix, as v0.5.0-beta.4-23ce7a0 does; it stays in the image tag. A beta
+# (v1.2.3-beta.1, with or without such a suffix) gets only its own version tag, never :latest.
+
+on:
+  release:
+    types: [published]
+
+# One publish at a time; a newer release cancels an in-progress one.
+concurrency:
+  group: release-artifacts
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Resolve tags
+        id: meta
+        run: |
+          version="${{ github.event.release.tag_name }}"
+          version="${version#v}"
+          # Tags may end in a short commit id, as v0.5.0-beta.4-23ce7a0 does. Validate the
+          # version part, then keep the whole tag as the image tag so it names one build.
+          core="${version%%-*}"
+          if ! [[ "$core" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag is not a version: $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-beta.* ]]; then
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+            echo "Betas do not move :latest." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Login to DockerHub
+        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Login to Quay.io
+        if: ${{ env.QUAY_USERNAME != '' && env.QUAY_TOKEN != '' }}
+        uses: docker/login-action@v3
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+      - name: Login to GitHub Container Registry
+        if: ${{ env.ARIACOMPUTE_TOKEN != '' }}
+        uses: docker/login-action@v3
+        env:
+          ARIACOMPUTE_TOKEN: ${{ secrets.ARIACOMPUTE_TOKEN }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.ARIACOMPUTE_TOKEN }}
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ember-release:local
+      - name: Push to configured registries
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          ARIACOMPUTE_TOKEN: ${{ secrets.ARIACOMPUTE_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          LATEST: ${{ steps.meta.outputs.latest }}
+        run: |
+          push_image() {
+            repository="$1"
+            docker tag ember-release:local "$repository:$VERSION"
+            docker push "$repository:$VERSION"
+            if [ "$LATEST" = "true" ]; then
+              docker tag ember-release:local "$repository:latest"
+              docker push "$repository:latest"
+            fi
+            echo "Pushed $repository:$VERSION." >> "$GITHUB_STEP_SUMMARY"
+          }
+          if [ -n "$DOCKERHUB_USERNAME" ]; then push_image "ariacompute/ember"; fi
+          if [ -n "$QUAY_USERNAME" ]; then push_image "quay.io/ariacompute/ember"; fi
+          if [ -n "$ARIACOMPUTE_TOKEN" ]; then push_image "ghcr.io/ariacompute/ember"; fi
+          if [ -z "$DOCKERHUB_USERNAME$QUAY_USERNAME$ARIACOMPUTE_TOKEN" ]; then
+            echo "::notice::No registry credentials configured; image built but not pushed."
+          fi
